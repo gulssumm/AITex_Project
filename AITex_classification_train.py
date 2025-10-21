@@ -55,6 +55,12 @@ model.compile(
     metrics=['accuracy']
 )
 
+# === CHECK HOW MANY IMAGES THE DATASET HAVE PER CLASS ===
+base = "D:/AITexProject/aitex_dataset_processed/train"
+for cls in ["Defect", "NoDefect"]:
+    count = len(os.listdir(os.path.join(base, cls)))
+    print(cls, ":", count)
+
 # === TRAIN MODEL ===
 history = model.fit(
     train_ds,
