@@ -1,3 +1,7 @@
 /aitex_dataset
 /aitex_dataset_processed
 *.h5
+*.keras
+*.pdf
+/.idea
+/.venv

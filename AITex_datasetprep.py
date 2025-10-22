@@ -29,3 +29,7 @@ def copy_images(paths, labels, split):
 
 copy_images(X_train, y_train, "train")
 copy_images(X_val, y_val, "val")
+
+# Verification
+print(f"Training - Defect: {sum(y_train)}, NoDefect: {len(y_train)-sum(y_train)}")
+print(f"Validation - Defect: {sum(y_val)}, NoDefect: {len(y_val)-sum(y_val)}")

@@ -21,14 +21,14 @@ train_ds = image_dataset_from_directory(
     os.path.join(data_dir, "train"),
     image_size=img_size,
     batch_size=batch_size,
-    color_mode="rgb",
+    color_mode="grayscale",
 )
 
 val_ds = image_dataset_from_directory(
     os.path.join(data_dir, "val"),
     image_size=img_size,
     batch_size=batch_size,
-    color_mode="rgb",
+    color_mode="grayscale",
 )
 
 # === DATA AUGMENTATION ===
