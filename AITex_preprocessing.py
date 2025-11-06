@@ -22,7 +22,6 @@ for root, dirs, files in os.walk(no_defect_path):
 
 # IMAGE PROPERTIES
 from PIL import Image
-import numpy as np
 
 def check_properties(folder_path):
     sizes = []
@@ -37,7 +36,7 @@ def check_properties(folder_path):
     print("Unique sizes:", set(sizes))
     print("Color modes:", set(modes))
 
-print("Defect images:")
+print("\nDefect images:")
 check_properties(os.path.join(base_path, "Defect_images"))
 print("\nNoDefect images:")
 check_properties(os.path.join(base_path, "NODefect_images"))

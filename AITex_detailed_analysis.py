@@ -1,9 +1,6 @@
 import os
 import numpy as np
 import matplotlib.pyplot as plt
-from PIL import Image
-import seaborn as sns
-from collections import Counter
 import cv2
 
 base_path = "D:/AITexProject/aitex_dataset"
@@ -13,11 +10,8 @@ base_path = "D:/AITexProject/aitex_dataset"
 # 1. DETAILED DATASET STATISTICS
 # ==========================================
 def analyze_dataset_statistics():
-    """Comprehensive dataset statistics for thesis reporting"""
-
-    print("=" * 60)
+    # Comprehensive dataset statistics for thesis reporting
     print("DATASET STATISTICS REPORT")
-    print("=" * 60)
 
     # Count images
     defect_dir = os.path.join(base_path, "Defect_images")
@@ -30,10 +24,10 @@ def analyze_dataset_statistics():
         nodefect_files.extend([f for f in files if f.lower().endswith('.png')])
 
     print(f"\nClass Distribution:")
-    print(f"  Defect images: {len(defect_files)}")
-    print(f"  No-Defect images: {len(nodefect_files)}")
-    print(f"  Total: {len(defect_files) + len(nodefect_files)}")
-    print(f"  Class imbalance ratio: {len(nodefect_files) / len(defect_files):.2f}:1")
+    print(f"Defect images: {len(defect_files)}")
+    print(f"No-Defect images: {len(nodefect_files)}")
+    print(f"Total: {len(defect_files) + len(nodefect_files)}")
+    print(f"Class imbalance ratio: {len(nodefect_files) / len(defect_files):.2f}:1")
 
     return defect_files, nodefect_files
 
@@ -42,11 +36,8 @@ def analyze_dataset_statistics():
 # 2. IMAGE QUALITY ANALYSIS
 # ==========================================
 def analyze_image_quality(defect_files, nodefect_files):
-    """Analyze image properties for understanding data characteristics"""
-
-    print("\n" + "=" * 60)
+    # Analyze image properties for understanding data characteristics
     print("IMAGE QUALITY ANALYSIS")
-    print("=" * 60)
 
     defect_dir = os.path.join(base_path, "Defect_images")
     nodefect_dir = os.path.join(base_path, "NODefect_images")
@@ -76,12 +67,12 @@ def analyze_image_quality(defect_files, nodefect_files):
     nodefect_bright, nodefect_contrast = get_stats(nodefect_files, nodefect_dir)
 
     print(f"\nDefect Images:")
-    print(f"  Mean brightness: {np.mean(defect_bright):.2f} ± {np.std(defect_bright):.2f}")
-    print(f"  Mean contrast (std): {np.mean(defect_contrast):.2f} ± {np.std(defect_contrast):.2f}")
+    print(f"Mean brightness: {np.mean(defect_bright):.2f} ± {np.std(defect_bright):.2f}")
+    print(f"Mean contrast (std): {np.mean(defect_contrast):.2f} ± {np.std(defect_contrast):.2f}")
 
     print(f"\nNo-Defect Images:")
-    print(f"  Mean brightness: {np.mean(nodefect_bright):.2f} ± {np.std(nodefect_bright):.2f}")
-    print(f"  Mean contrast (std): {np.mean(nodefect_contrast):.2f} ± {np.std(nodefect_contrast):.2f}")
+    print(f"Mean brightness: {np.mean(nodefect_bright):.2f} ± {np.std(nodefect_bright):.2f}")
+    print(f"Mean contrast (std): {np.mean(nodefect_contrast):.2f} ± {np.std(nodefect_contrast):.2f}")
 
     # Visualization
     fig, axes = plt.subplots(1, 2, figsize=(12, 4))
@@ -109,11 +100,8 @@ def analyze_image_quality(defect_files, nodefect_files):
 # 3. DEFECT TYPE ANALYSIS
 # ==========================================
 def analyze_defect_types():
-    """Analyze defect characteristics using masks"""
-
-    print("\n" + "=" * 60)
+    # Analyze defect characteristics using masks
     print("DEFECT CHARACTERISTICS ANALYSIS")
-    print("=" * 60)
 
     mask_dir = os.path.join(base_path, "Mask_images")
     mask_files = [f for f in os.listdir(mask_dir) if f.endswith('_mask.png')]
@@ -134,10 +122,10 @@ def analyze_defect_types():
             defect_ratios.append(ratio * 100)  # percentage
 
     print(f"\nDefect Size Statistics:")
-    print(f"  Mean defect area: {np.mean(defect_ratios):.2f}% of image")
-    print(f"  Std deviation: {np.std(defect_ratios):.2f}%")
-    print(f"  Min: {np.min(defect_ratios):.2f}%, Max: {np.max(defect_ratios):.2f}%")
-    print(f"  Median: {np.median(defect_ratios):.2f}%")
+    print(f"Mean defect area: {np.mean(defect_ratios):.2f}% of image")
+    print(f"Std deviation: {np.std(defect_ratios):.2f}%")
+    print(f"Min: {np.min(defect_ratios):.2f}%, Max: {np.max(defect_ratios):.2f}%")
+    print(f"Median: {np.median(defect_ratios):.2f}%")
 
     # Categorize defect sizes
     small = sum(1 for r in defect_ratios if r < 5)
@@ -145,9 +133,9 @@ def analyze_defect_types():
     large = sum(1 for r in defect_ratios if r >= 15)
 
     print(f"\nDefect Size Categories:")
-    print(f"  Small (<5%): {small} images ({small / len(defect_ratios) * 100:.1f}%)")
-    print(f"  Medium (5-15%): {medium} images ({medium / len(defect_ratios) * 100:.1f}%)")
-    print(f"  Large (>15%): {large} images ({large / len(defect_ratios) * 100:.1f}%)")
+    print(f"Small (<5%): {small} images ({small / len(defect_ratios) * 100:.1f}%)")
+    print(f"Medium (5-15%): {medium} images ({medium / len(defect_ratios) * 100:.1f}%)")
+    print(f"Large (>15%): {large} images ({large / len(defect_ratios) * 100:.1f}%)")
 
     # Visualization
     plt.figure(figsize=(10, 5))
@@ -166,11 +154,7 @@ def analyze_defect_types():
 # 4. VISUAL SAMPLES FOR THESIS
 # ==========================================
 def create_sample_visualization():
-    """Create publication-quality sample images for thesis"""
-
-    print("\n" + "=" * 60)
     print("CREATING SAMPLE VISUALIZATIONS")
-    print("=" * 60)
 
     defect_dir = os.path.join(base_path, "Defect_images")
     nodefect_dir = os.path.join(base_path, "NODefect_images")
@@ -207,7 +191,6 @@ def create_sample_visualization():
     plt.tight_layout()
     plt.savefig('aitex_sample_visualization.png', dpi=300, bbox_inches='tight')
     plt.show()
-
     print("Saved: aitex_sample_visualization.png")
 
 
@@ -220,6 +203,4 @@ if __name__ == "__main__":
     analyze_defect_types()
     create_sample_visualization()
 
-    print("\n" + "=" * 60)
-    print("ANALYSIS COMPLETE - Check generated PNG files")
-    print("=" * 60)
+    print("ANALYSIS COMPLETE")

@@ -1,12 +1,3 @@
-"""
-U-Net Strategy for Tiny Defects
-Key corrections:
-1. Fixed grayscale handling (1 channel instead of 3)
-2. Updated model architecture for grayscale input
-3. Corrected dataset statistics
-4. Fixed weight calculation logic
-"""
-
 import tensorflow as tf
 from tensorflow.keras import layers, models
 import os
@@ -28,7 +19,7 @@ BATCH_SIZE = 4
 # LOAD DATA
 # ==========================================
 def load_data():
-    """Load images as grayscale (1 channel) instead of RGB"""
+    # Load images as grayscale (1 channel) instead of RGB
     img_files = [f for f in os.listdir(img_dir) if f.endswith('.png')]
 
     images = []
@@ -87,10 +78,7 @@ print(f"  Imbalance ratio: {background_pixels/defect_pixels:.1f}:1")
 # DATA AUGMENTATION (CRITICAL FOR SMALL DATASET)
 # ==========================================
 def augment_data(image, mask):
-    """
-    Apply random augmentations to increase effective dataset size
-    This is CRUCIAL when you only have 85 training images
-    """
+    # Apply random augmentations to increase effective dataset size
     # Random flip
     if tf.random.uniform(()) > 0.5:
         image = tf.image.flip_left_right(image)
@@ -166,7 +154,7 @@ def weighted_bce_dice_loss(y_true, y_pred):
 # ==========================================
 
 def dice_coefficient(y_true, y_pred, smooth=1.0):
-    """Dice coefficient - measures overlap"""
+    # Dice coefficient - measures overlap
     y_true_f = tf.reshape(y_true, [-1])
     y_pred_f = tf.reshape(y_pred, [-1])
 
@@ -176,7 +164,7 @@ def dice_coefficient(y_true, y_pred, smooth=1.0):
     return dice
 
 def precision_metric(y_true, y_pred):
-    """Precision: of predicted defects, how many are real?"""
+    # Precision: of predicted defects, how many are real?
     y_pred_binary = tf.cast(y_pred > 0.5, tf.float32)
     y_true_f = tf.reshape(y_true, [-1])
     y_pred_f = tf.reshape(y_pred_binary, [-1])
@@ -188,7 +176,7 @@ def precision_metric(y_true, y_pred):
     return precision
 
 def recall_metric(y_true, y_pred):
-    """Recall: of actual defects, how many did we find?"""
+    # Recall: of actual defects, how many did we find?
     y_pred_binary = tf.cast(y_pred > 0.5, tf.float32)
     y_true_f = tf.reshape(y_true, [-1])
     y_pred_f = tf.reshape(y_pred_binary, [-1])
@@ -200,7 +188,7 @@ def recall_metric(y_true, y_pred):
     return recall
 
 def iou_metric(y_true, y_pred):
-    """IoU (Intersection over Union) - another useful metric"""
+    # IoU (Intersection over Union) - another useful metric
     y_pred_binary = tf.cast(y_pred > 0.5, tf.float32)
     y_true_f = tf.reshape(y_true, [-1])
     y_pred_f = tf.reshape(y_pred_binary, [-1])
@@ -212,13 +200,11 @@ def iou_metric(y_true, y_pred):
     return iou
 
 # ==========================================
-# CORRECTED U-NET FOR GRAYSCALE (1 CHANNEL)
+# U-NET FOR GRAYSCALE (1 CHANNEL)
 # ==========================================
 def tiny_unet(input_size=(IMG_SIZE, IMG_SIZE, 1)):  # Changed from 3 to 1
-    """
-    Smaller U-Net optimized for grayscale input
-    Reason: With only 85 images, a large model will overfit
-    """
+    # Smaller U-Net optimized for grayscale input
+    # Reason: With only 85 images, a large model will overfit
     inputs = layers.Input(input_size)
 
     # Encoder - reduced filters
@@ -279,7 +265,7 @@ def tiny_unet(input_size=(IMG_SIZE, IMG_SIZE, 1)):  # Changed from 3 to 1
 # ==========================================
 # BUILD MODEL
 # ==========================================
-print("\nBuilding Tiny U-Net for Grayscale Images...")
+print("\nBuilding Tiny U-Net for Grayscale Images")
 model = tiny_unet()
 
 model.compile(
@@ -344,9 +330,7 @@ history = model.fit(
 # ==========================================
 # EVALUATE
 # ==========================================
-print("\n" + "="*60)
 print("FINAL EVALUATION")
-print("="*60)
 
 results = model.evaluate(val_dataset, verbose=0)
 print(f"\nValidation Loss: {results[0]:.4f}")
@@ -355,9 +339,7 @@ print(f"Validation Recall: {results[2]:.4f} ({results[2]*100:.2f}%)")
 print(f"Validation Precision: {results[3]:.4f} ({results[3]*100:.2f}%)")
 print(f"Validation IoU: {results[4]:.4f} ({results[4]*100:.2f}%)")
 
-print("\n" + "="*60)
 print("INTERPRETATION")
-print("="*60)
 print("\nDice Score (overlap):")
 if results[1] > 0.5:
     print(">50% - Excellent segmentation!")
@@ -389,9 +371,7 @@ else:
 # ==========================================
 # VISUALIZE PREDICTIONS
 # ==========================================
-print("\n" + "="*60)
 print("GENERATING VISUALIZATIONS")
-print("="*60)
 
 predictions = model.predict(val_dataset)
 predictions_binary = (predictions > 0.5).astype(np.uint8)
@@ -435,7 +415,7 @@ for i, idx in enumerate(sample_indices):
 plt.suptitle('Segmentation Results (Grayscale)', fontsize=16, fontweight='bold')
 plt.tight_layout()
 plt.savefig('unet_tiny_predictions.png', dpi=300, bbox_inches='tight')
-print("✓ Saved: unet_tiny_predictions.png")
+print("Saved: unet_tiny_predictions.png")
 plt.show()
 
 # ==========================================
@@ -514,9 +494,7 @@ plt.show()
 # ==========================================
 # DETAILED ANALYSIS OF RESULTS
 # ==========================================
-print("\n" + "="*60)
 print("DETAILED ANALYSIS")
-print("="*60)
 
 # Per-image analysis
 print("\nPer-image Dice scores:")
@@ -541,21 +519,8 @@ if dice_scores:
     print(f"Std: {np.std(dice_scores):.3f}")
     print(f"Min: {np.min(dice_scores):.3f}, Max: {np.max(dice_scores):.3f}")
 
-print("\n" + "="*60)
-print("KEY IMPROVEMENTS FROM PREVIOUS VERSION")
-print("="*60)
-print("1.Native grayscale processing (3x fewer parameters)")
-print("2.Reduced weight from 500x to 50x (prevents 'predict everything')")
-print("3.Added focal loss component (handles hard examples)")
-print("4.Added BatchNormalization (improves stability)")
-print("5.Added IoU metric (additional evaluation metric)")
-print("6.Balanced loss combination (0.4 BCE + 0.4 Dice + 0.2 Focal)")
-
-print("\n" + "="*60)
 print("TRAINING COMPLETE")
-print("="*60)
 print("\nSaved files:")
-print("  - unet_tiny_best.keras (best model)")
-print("  - unet_tiny_predictions.png (visual results)")
-print("  - unet_tiny_training.png (training curves)")
-print("="*60)
+print("unet_tiny_best.keras (best model)")
+print("unet_tiny_predictions.png (visual results)")
+print("unet_tiny_training.png (training curves)")
