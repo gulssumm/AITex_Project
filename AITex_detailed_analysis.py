@@ -2,12 +2,13 @@ import os
 import numpy as np
 import matplotlib.pyplot as plt
 import cv2
+import glob
+from collections import Counter
 
 base_path = "D:/AITexProject/aitex_dataset"
 
-
 # ==========================================
-# 1. DETAILED DATASET STATISTICS
+# DETAILED DATASET STATISTICS
 # ==========================================
 def analyze_dataset_statistics():
     # Comprehensive dataset statistics for thesis reporting
@@ -33,7 +34,7 @@ def analyze_dataset_statistics():
 
 
 # ==========================================
-# 2. IMAGE QUALITY ANALYSIS
+# IMAGE QUALITY ANALYSIS
 # ==========================================
 def analyze_image_quality(defect_files, nodefect_files):
     # Analyze image properties for understanding data characteristics
@@ -97,7 +98,7 @@ def analyze_image_quality(defect_files, nodefect_files):
 
 
 # ==========================================
-# 3. DEFECT TYPE ANALYSIS
+# DEFECT TYPE ANALYSIS
 # ==========================================
 def analyze_defect_types():
     # Analyze defect characteristics using masks
@@ -151,7 +152,7 @@ def analyze_defect_types():
 
 
 # ==========================================
-# 4. VISUAL SAMPLES FOR THESIS
+# VISUAL SAMPLES
 # ==========================================
 def create_sample_visualization():
     print("CREATING SAMPLE VISUALIZATIONS")
@@ -202,5 +203,17 @@ if __name__ == "__main__":
     analyze_image_quality(defect_files, nodefect_files)
     analyze_defect_types()
     create_sample_visualization()
+
+    base = "D:/AITexProject/aitex_dataset"
+    all_imgs = glob.glob(os.path.join(base, "**", "*.png"), recursive=True)
+
+    fabrics = []
+    for img in all_imgs:
+        if 'mask' not in img:
+            fname = os.path.basename(img)
+            fabric = fname.split('_')[-1].replace('.png', '')
+            fabrics.append(fabric)
+
+    print(Counter(fabrics))
 
     print("ANALYSIS COMPLETE")
