@@ -13,10 +13,10 @@ train_transform = A.Compose([
     A.HorizontalFlip(p=0.5),
     # No vertical flip - fabric has directional weave
 
-    A.ShiftScaleRotate(
-        shift_limit=0.1,  # 10% shift
-        scale_limit=0.15,  # ±15% zoom
-        rotate_limit=10,  # ±10° rotation
+    A.Affine(
+        translate_percent=0.1,  # 10% shift
+        scale=(0.85,1.15),  # scale range (85% to 115%)
+        rotate=(-10,10),  # ±10° rotation
         border_mode=cv2.BORDER_REFLECT,
         p=0.7
     ),
@@ -25,7 +25,6 @@ train_transform = A.Compose([
     A.ElasticTransform(
         alpha=50,
         sigma=5,
-        alpha_affine=10,
         border_mode=cv2.BORDER_REFLECT,
         p=0.3
     ),
@@ -53,7 +52,7 @@ train_transform = A.Compose([
 
     # NOISE & BLUR (Simulates camera/sensor issues)
     A.OneOf([
-        A.GaussNoise(var_limit=(10, 50), p=1.0),
+        A.GaussNoise(std_range=(0.1, 0.3), mean_range=(0.0, 0.0), p=1.0),
         A.ISONoise(color_shift=(0.01, 0.05), intensity=(0.1, 0.5), p=1.0),
     ], p=0.4),
 
@@ -65,13 +64,10 @@ train_transform = A.Compose([
     # DEFECT-AWARE AUGMENTATIONS
     # Coarse dropout (simulates occlusion but preserves defects)
     A.CoarseDropout(
-        max_holes=8,
-        max_height=32,
-        max_width=32,
-        min_holes=2,
-        min_height=8,
-        min_width=8,
-        fill_value=128,  # Gray fill (fabric-like)
+        num_holes_range=(2, 8),
+        hole_height_range=(8, 32),
+        hole_width_range=(8, 32),
+        fill=0,
         p=0.3
     ),
 
@@ -137,6 +133,7 @@ class AITEXDataset(Dataset):
 
         # Load image
         image = cv2.imread(str(img_path), cv2.IMREAD_GRAYSCALE)
+        image = cv2.resize(image, (512, 256), interpolation=cv2.INTER_AREA)
         image = cv2.cvtColor(image, cv2.COLOR_GRAY2RGB)
 
         # Apply augmentation
