@@ -11,9 +11,6 @@ base_path = "D:/AITexProject/aitex_dataset"
 # DETAILED DATASET STATISTICS
 # ==========================================
 def analyze_dataset_statistics():
-    # Comprehensive dataset statistics for thesis reporting
-    print("DATASET STATISTICS REPORT")
-
     # Count images
     defect_dir = os.path.join(base_path, "Defect_images")
     nodefect_dir = os.path.join(base_path, "NODefect_images")

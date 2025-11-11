@@ -5,14 +5,23 @@ import glob
 from collections import Counter
 
 base_path = "D:/AITexProject/aitex_dataset"
+out_base = "D:/AITexProject/aitex_dataset_processed"
 
 def get_fabric_type(filepath):
     filename = os.path.basename(filepath)
     return filename.split('_')[-1].replace('.png', '')
 
-# Collect paths
+def get_mask_path(image_path, mask_base_dir):
+    # Calculates the corresponding mask path for a defect image
+    filename = os.path.basename(image_path)
+    # Masks follow the pattern: 'nnnn_ddd_ff.png' -> 'nnnn_ddd_ff_mask.png'
+    mask_filename = filename.replace('.png', '_mask.png')
+    return os.path.join(mask_base_dir, mask_filename)
+
+# Data Collection
 defect_paths = glob.glob(os.path.join(base_path, "Defect_images", "*.png"))
 nodefect_paths = glob.glob(os.path.join(base_path, "NODefect_images", "**", "*.png"), recursive=True)
+mask_base_dir = os.path.join(base_path, "Mask_images")
 
 X = defect_paths + nodefect_paths
 y = [1]*len(defect_paths) + [0]*len(nodefect_paths)
@@ -44,19 +53,37 @@ X_train, X_val, y_train, y_val = train_test_split(
 )
 
 # Create dirs and copy
-out_base = "D:/AITexProject/aitex_dataset_processed"
 for split in ["train", "val"]:
-    for cls in ["Defect", "NoDefect"]:
-        os.makedirs(os.path.join(out_base, split, cls), exist_ok=True)
+    os.makedirs(os.path.join(out_base, split, "images"), exist_ok=True)
+    os.makedirs(os.path.join(out_base, split, "masks"), exist_ok=True)
 
-def copy_images(paths, labels, split):
+def copy_files(paths, labels, split):
     for path, label in zip(paths, labels):
-        cls = "Defect" if label == 1 else "NoDefect"
-        dest = os.path.join(out_base, split, cls, os.path.basename(path))
-        shutil.copy(path, dest)
+        dest_img_path = os.path.join(out_base, split, "images", os.path.basename(path))
+        shutil.copy(path, dest_img_path)
 
-copy_images(X_train, y_train, "train")
-copy_images(X_val, y_val, "val")
+        image_filename = os.path.basename(path)
+        dest_mask_folder = os.path.join(out_base, split, "masks")
+
+        if label == 1:  # Defect Image
+            mask_path = get_mask_path(path, mask_base_dir)
+            dest_mask_path = os.path.join(dest_mask_folder, os.path.basename(mask_path))
+
+            if os.path.exists(mask_path):
+                # Copy the real defect mask
+                shutil.copy(mask_path, dest_mask_path)
+            else:
+                print(f"WARNING: Mask not found for {image_filename}. Creating placeholder.")
+                with open(os.path.join(dest_mask_folder, image_filename.replace('.png', '_MISSING_MASK.txt')),
+                          'w') as f:
+                    f.write(f"Mask missing for {image_filename}")
+
+        else:  # NoDefect Image (label == 0)
+            placeholder_filename = image_filename.replace('.png', '_EMPTY_MASK_PLACEHOLDER.txt')
+            with open(os.path.join(dest_mask_folder, placeholder_filename), 'w') as f:
+                f.write(f"Generate all-black mask for image {image_filename}")
+copy_files(X_train, y_train, "train")
+copy_files(X_val, y_val, "val")
 
 print(f"\nTraining - Defect: {sum(y_train)}, NoDefect: {len(y_train)-sum(y_train)}")
 print(f"Validation - Defect: {sum(y_val)}, NoDefect: {len(y_val)-sum(y_val)}")

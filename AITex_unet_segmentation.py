@@ -5,6 +5,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 from sklearn.model_selection import train_test_split
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
 
 # === PATHS ===
 base_path = "D:/AITexProject/aitex_dataset"
@@ -12,106 +14,212 @@ img_dir = os.path.join(base_path, "Defect_images")
 mask_dir = os.path.join(base_path, "Mask_images")
 
 # === SETTINGS ===
-IMG_SIZE = 256
+IMG_WIDTH = 512
+IMG_HEIGHT = 256
+IMG_SHAPE = (IMG_HEIGHT, IMG_WIDTH, 1) # (H, W, C)
 BATCH_SIZE = 4
 
 # ==========================================
-# LOAD DATA
+# ALBUMENTATIONS DEFINITIONS (Superior Augmentation)
 # ==========================================
-def load_data():
-    # Load images as grayscale (1 channel) instead of RGB
-    img_files = [f for f in os.listdir(img_dir) if f.endswith('.png')]
+train_transform = A.Compose(
+    [
+        # GEOMETRIC
+        A.HorizontalFlip(p=0.5),
+        A.Affine(
+            translate_percent=0.1, scale=(0.85, 1.15), rotate=(-10, 10),
+            border_mode=cv2.BORDER_REFLECT, p=0.7
+        ),
+        A.ElasticTransform(alpha=50, sigma=5, border_mode=cv2.BORDER_REFLECT, p=0.3),
+        A.GridDistortion(num_steps=5, distort_limit=0.2, border_mode=cv2.BORDER_REFLECT, p=0.3),
 
-    images = []
-    masks = []
+        # PHOTOMETRIC
+        A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=0.6),
+        A.RandomGamma(gamma_limit=(80, 120), p=0.3),
 
-    for img_file in img_files:
-        img_path = os.path.join(img_dir, img_file)
-        img = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
-        img = cv2.resize(img, (IMG_SIZE, IMG_SIZE))
-        images.append(img)
+        # NOISE - BLUR
+        A.OneOf([
+            A.GaussNoise(p=1.0),
+            A.ISONoise(p=1.0),
+        ], p=0.4),
+        A.Blur(blur_limit=3, p=0.2),
 
-        mask_file = img_file.replace('.png', '_mask.png')
-        mask_path = os.path.join(mask_dir, mask_file)
+        # DEFECT-AWARE
+        A.CoarseDropout(
+            num_holes_range=(2, 8), hole_height_range=(8, 32), hole_width_range=(8, 32), fill=0, p=0.3
+        ),
+    ],
+    additional_targets={'mask': 'mask'}
+)
+
+# ==========================================
+# ALBUMENTATIONS WRAPPER FOR TENSORFLOW
+# ==========================================
+
+# Wrapper to execute Albumentations within the TF graph
+def augment_fn(image, mask):
+    # Convert tensors back to numpy arrays for Albumentations
+    data = {"image": image.numpy(), "mask": mask.numpy()}
+    # TensorFlow usually outputs (H, W, 1)
+    # Albumentations expects (H, W, C) where C=3 or C=1
+    # Convert to C=3 if C=1 before augmentation
+    if data["image"].shape[-1] == 1:
+        data["image"] = cv2.cvtColor(data["image"], cv2.COLOR_GRAY2RGB)
+
+    augmented_data = train_transform(**data)
+
+    aug_image = tf.convert_to_tensor(augmented_data['image'], dtype=tf.float32)
+
+    if aug_image.shape[-1] == 3:
+        # Convert RGB tensor back to grayscale (H, W) or (H, W, 1) NumPy array first
+        aug_image_np = cv2.cvtColor(aug_image.numpy().astype(np.uint8), cv2.COLOR_RGB2GRAY)
+        # Convert back to tensor and expand dimensions to (H, W, 1)
+        aug_image = tf.expand_dims(tf.convert_to_tensor(aug_image_np, dtype=tf.float32), axis=-1)
+
+    aug_mask = tf.convert_to_tensor(augmented_data['mask'], dtype=tf.float32)
+
+    # Albumentations outputs (H, W) or (H, W, C)
+    if len(aug_mask.shape) == 2:
+        aug_mask = tf.expand_dims(aug_mask, axis=-1)
+
+    # The normalization in tf_augment_wrapper will apply: aug_image / 255.0
+    return aug_image, aug_mask
+
+def tf_augment_wrapper(image, mask):
+    aug_image, aug_mask = tf.py_function(
+        func=augment_fn,
+        inp=[image, mask],
+        Tout=[tf.float32, tf.float32]
+    )
+    aug_image.set_shape(IMG_SHAPE)
+    aug_mask.set_shape((IMG_HEIGHT, IMG_WIDTH, 1))
+    return aug_image, aug_mask
+
+
+# ==========================================
+# LOAD DATA FROM PROCESSED FOLDERS
+# ==========================================
+PROCESSED_BASE_PATH = "D:/AITexProject/aitex_dataset_processed"
+TRAIN_DIR = os.path.join(PROCESSED_BASE_PATH, "train")
+VAL_DIR = os.path.join(PROCESSED_BASE_PATH, "val")
+
+def load_validation_arrays(data_dir):
+    # Loads all validation images and masks into NumPy arrays for final analysis
+    img_folder = os.path.join(data_dir, "images")
+    mask_folder = os.path.join(data_dir, "masks")
+
+    X_val_list = []
+    y_val_list = []
+
+    image_paths = sorted([os.path.join(img_folder, f) for f in os.listdir(img_folder) if f.endswith('.png')])
+
+    for img_path in image_paths:
+        img_filename = os.path.basename(img_path)
+
+        # Load Image
+        image = cv2.imread(img_path, cv2.IMREAD_GRAYSCALE)
+        image = cv2.resize(image, (IMG_WIDTH, IMG_HEIGHT), interpolation=cv2.INTER_AREA)
+        # Apply normalization
+        X_val_list.append(image / 255.0)
+
+        # Load Mask or Placeholder
+        mask_path = os.path.join(mask_folder, img_filename.replace('.png', '_mask.png'))
+        is_nodefect_placeholder = img_filename.replace('.png', '_EMPTY_MASK_PLACEHOLDER.txt')
 
         if os.path.exists(mask_path):
             mask = cv2.imread(mask_path, cv2.IMREAD_GRAYSCALE)
-            mask = cv2.resize(mask, (IMG_SIZE, IMG_SIZE))
-            mask = (mask > 0).astype(np.uint8)
+            mask = cv2.resize(mask, (IMG_WIDTH, IMG_HEIGHT), interpolation=cv2.INTER_NEAREST)
+            mask = (mask > 0).astype(np.float32)
+        elif os.path.exists(os.path.join(mask_folder, is_nodefect_placeholder)):
+            mask = np.zeros((IMG_HEIGHT, IMG_WIDTH), dtype=np.float32)
         else:
-            mask = np.zeros((IMG_SIZE, IMG_SIZE), dtype=np.uint8)
+            # Handle the two missing mask warnings from datasetprep
+            mask = np.zeros((IMG_HEIGHT, IMG_WIDTH), dtype=np.float32)
 
-        masks.append(mask)
+        y_val_list.append(mask)
 
-    return np.array(images), np.array(masks)
+    X_val_loaded = np.array(X_val_list).astype(np.float32)
+    y_val_loaded = np.array(y_val_list).astype(np.float32)
 
-X, y = load_data()
-# Add channel dimension for grayscale: (N, H, W) -> (N, H, W, 1)
-X = np.expand_dims(X, axis=-1)
-y = np.expand_dims(y, axis=-1)
+    # Add channel dimension (N, H, W) -> (N, H, W, 1)
+    X_val_loaded = np.expand_dims(X_val_loaded, axis=-1)
+    y_val_loaded = np.expand_dims(y_val_loaded, axis=-1)
 
-X_train, X_val, y_train, y_val = train_test_split(
-    X, y, test_size=0.2, random_state=42, stratify=y.reshape(len(y), -1).max(axis=1)
+    return X_val_loaded, y_val_loaded
+
+def create_tf_datasets_from_processed_files(data_dir, batch_size, is_training):
+    # Creates a TensorFlow Dataset pipeline for efficient data streaming
+    img_folder = os.path.join(data_dir, "images")
+    mask_folder = os.path.join(data_dir, "masks")
+
+    image_paths = sorted([os.path.join(img_folder, f) for f in os.listdir(img_folder) if f.endswith('.png')])
+
+    # Load and process a single image/mask pair (TF-compatible)
+    def load_and_process_pair(img_path_tensor):
+        img_path = img_path_tensor.numpy().decode('utf-8')
+        img_filename = os.path.basename(img_path)
+
+        mask_path = os.path.join(mask_folder, img_filename.replace('.png', '_mask.png'))
+        is_nodefect_placeholder = img_filename.replace('.png', '_EMPTY_MASK_PLACEHOLDER.txt')
+
+        # Load Image (Grayscale)
+        image = tf.io.read_file(img_path)
+        image = tf.image.decode_png(image, channels=1)
+        image = tf.image.resize(image, (IMG_HEIGHT, IMG_WIDTH), method=tf.image.ResizeMethod.AREA)
+
+        # Load or Generate Mask
+        if os.path.exists(mask_path):
+            mask = tf.io.read_file(mask_path)
+            mask = tf.image.decode_png(mask, channels=1)
+            mask = tf.image.resize(mask, (IMG_HEIGHT, IMG_WIDTH), method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
+            mask = tf.cast(mask > 0, tf.float32)
+        elif os.path.exists(os.path.join(mask_folder, is_nodefect_placeholder)):
+            mask = tf.zeros((IMG_HEIGHT, IMG_WIDTH, 1), dtype=tf.float32)
+        else:
+            mask = tf.zeros((IMG_HEIGHT, IMG_WIDTH, 1), dtype=tf.float32)
+
+        if not is_training:
+            image = tf.cast(image, tf.float32) / 255.0
+
+        return tf.cast(image, tf.float32), mask
+
+    dataset = tf.data.Dataset.from_tensor_slices(image_paths)
+    dataset = dataset.map(
+        lambda x: tf.py_function(load_and_process_pair, [x], [tf.float32, tf.float32]),
+        num_parallel_calls=tf.data.AUTOTUNE
+    )
+
+    def set_shapes(image, mask):
+        image.set_shape(IMG_SHAPE)
+        mask.set_shape((IMG_HEIGHT, IMG_WIDTH, 1))
+        return image, mask
+
+    dataset = dataset.map(set_shapes)
+
+    if is_training:
+        dataset = dataset.map(tf_augment_wrapper, num_parallel_calls=tf.data.AUTOTUNE)
+        dataset = dataset.shuffle(buffer_size=1000)
+
+    dataset = dataset.batch(batch_size).prefetch(tf.data.AUTOTUNE)
+    return dataset
+
+X_val, y_val = load_validation_arrays(VAL_DIR)
+print(f"Validation arrays loaded: X_val shape {X_val.shape}, y_val shape {y_val.shape}")
+
+# ==========================================
+# CREATE DATASETS (FOR TRAINING/EVALUATION)
+# ==========================================
+train_dataset = create_tf_datasets_from_processed_files(
+    TRAIN_DIR, BATCH_SIZE, is_training=True
 )
-
-print(f"Training set: {len(X_train)} images")
-print(f"Validation set: {len(X_val)} images")
-print(f"Image shape: {X_train.shape[1:]}")  # Should be (256, 256, 1)
-
-# Normalize
-X_train = X_train.astype('float32') / 255.0
-X_val = X_val.astype('float32') / 255.0
-y_train = y_train.astype('float32')
-y_val = y_val.astype('float32')
-
-# Calculate class weights
-total_pixels = y_train.size
-defect_pixels = np.sum(y_train)
-background_pixels = total_pixels - defect_pixels
-
-print(f"\nClass Distribution:")
-print(f"  Background: {background_pixels/total_pixels*100:.2f}%")
-print(f"  Defect: {defect_pixels/total_pixels*100:.2f}%")
-print(f"  Imbalance ratio: {background_pixels/defect_pixels:.1f}:1")
+val_dataset = create_tf_datasets_from_processed_files(
+    VAL_DIR, BATCH_SIZE, is_training=False
+)
+print(f"Train Dataset: {len(train_dataset)} batches")
+print(f"Validation Dataset: {len(val_dataset)} batches")
 
 # ==========================================
-# DATA AUGMENTATION (CRITICAL FOR SMALL DATASET)
-# ==========================================
-def augment_data(image, mask):
-    # Apply random augmentations to increase effective dataset size
-    # Random flip
-    if tf.random.uniform(()) > 0.5:
-        image = tf.image.flip_left_right(image)
-        mask = tf.image.flip_left_right(mask)
-
-    if tf.random.uniform(()) > 0.5:
-        image = tf.image.flip_up_down(image)
-        mask = tf.image.flip_up_down(mask)
-
-    # Random rotation (90 degree increments)
-    k = tf.cast(tf.random.uniform(()) * 4, tf.int32)
-    image = tf.image.rot90(image, k=k)
-    mask = tf.image.rot90(mask, k=k)
-
-    # Random brightness (only for image, not mask)
-    image = tf.image.random_brightness(image, 0.2)
-    image = tf.clip_by_value(image, 0.0, 1.0)
-
-    # Random contrast
-    image = tf.image.random_contrast(image, 0.8, 1.2)
-    image = tf.clip_by_value(image, 0.0, 1.0)
-
-    return image, mask
-
-# Create TF datasets with augmentation
-train_dataset = tf.data.Dataset.from_tensor_slices((X_train, y_train))
-train_dataset = train_dataset.shuffle(1000).map(augment_data).batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
-
-val_dataset = tf.data.Dataset.from_tensor_slices((X_val, y_val))
-val_dataset = val_dataset.batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
-
-# ==========================================
-# IMPROVED LOSS FUNCTION WITH ADAPTIVE WEIGHTING
+# LOSS FUNCTION WITH ADAPTIVE WEIGHTING
 # ==========================================
 
 def weighted_bce_dice_loss(y_true, y_pred):
@@ -128,8 +236,7 @@ def weighted_bce_dice_loss(y_true, y_pred):
     if len(bce.shape) == 3:
         bce = tf.expand_dims(bce, axis=-1)
 
-    # REDUCED weight: 50x instead of 500x to prevent "predict everything" behavior
-    # This is the KEY fix based on your analysis
+    # 50x to prevent "predict everything" behavior
     weight_map = y_true * 50.0 + (1 - y_true) * 1.0
     weighted_bce = tf.reduce_mean(bce * weight_map)
 
@@ -202,9 +309,7 @@ def iou_metric(y_true, y_pred):
 # ==========================================
 # U-NET FOR GRAYSCALE (1 CHANNEL)
 # ==========================================
-def tiny_unet(input_size=(IMG_SIZE, IMG_SIZE, 1)):  # Changed from 3 to 1
-    # Smaller U-Net optimized for grayscale input
-    # Reason: With only 85 images, a large model will overfit
+def tiny_unet(input_size=(IMG_SHAPE)):
     inputs = layers.Input(input_size)
 
     # Encoder - reduced filters
@@ -307,17 +412,6 @@ callbacks = [
 # ==========================================
 # TRAIN
 # ==========================================
-print("\n" + "="*60)
-print("TRAINING CONFIGURATION")
-print("="*60)
-print("Strategy:")
-print("  1. Grayscale input (1 channel) - native format")
-print("  2. Smaller model (fewer parameters to prevent overfitting)")
-print("  3. Data augmentation (flips, rotations, brightness, contrast)")
-print("  4. REDUCED weight for defect pixels (50x instead of 500x)")
-print("  5. Balanced loss: BCE + Dice + Focal")
-print("  6. Added BatchNormalization for stability")
-print()
 
 history = model.fit(
     train_dataset,
