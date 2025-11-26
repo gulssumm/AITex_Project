@@ -3,93 +3,137 @@ import shutil
 from sklearn.model_selection import train_test_split
 import glob
 from collections import Counter
+from PIL import Image, ImageOps
+import numpy as np
 
+# CONFIGURATION
 base_path = "D:/AITexProject/aitex_dataset"
 out_base = "D:/AITexProject/aitex_dataset_processed"
+TARGET_SIZE = (4096, 256)
 
 def get_fabric_type(filepath):
     filename = os.path.basename(filepath)
     return filename.split('_')[-1].replace('.png', '')
 
 def get_mask_path(image_path, mask_base_dir):
-    # Calculates the corresponding mask path for a defect image
     filename = os.path.basename(image_path)
-    # Masks follow the pattern: 'nnnn_ddd_ff.png' -> 'nnnn_ddd_ff_mask.png'
     mask_filename = filename.replace('.png', '_mask.png')
     return os.path.join(mask_base_dir, mask_filename)
 
-# Data Collection
-defect_paths = glob.glob(os.path.join(base_path, "Defect_images", "*.png"))
-nodefect_paths = glob.glob(os.path.join(base_path, "NODefect_images", "**", "*.png"), recursive=True)
-mask_base_dir = os.path.join(base_path, "Mask_images")
 
-X = defect_paths + nodefect_paths
-y = [1]*len(defect_paths) + [0]*len(nodefect_paths)
-fabrics = [get_fabric_type(p) for p in X]
+def safe_save_image(src_path, dest_path, target_size=TARGET_SIZE):
+    """
+    1. Converts everything to standard Grayscale ('L')
+    2. Pads images if they are smaller than 4096x256
+    """
+    try:
+        with Image.open(src_path) as img:
+            # 1. Force Grayscale (removes Alpha channel issues)
+            img = img.convert('L')
 
-print("Original fabric distribution:", Counter(fabrics))
+            # 2. Check Size
+            if img.size == target_size:
+                img.save(dest_path)
+            else:
+                print(f"Fixing size mismatch: {os.path.basename(src_path)} {img.size} -> {target_size}")
 
-# Remove fabric 08 (1 sample)
-filtered = [(x, label, fab) for x, label, fab in zip(X, y, fabrics) if fab != '08']
-X = [item[0] for item in filtered]
-y = [item[1] for item in filtered]
-fabrics = [item[2] for item in filtered]
+                # Create a black canvas
+                new_img = Image.new('L', target_size, 0)
 
-print(f"After filtering: {len(X)} images")
-print("Fabric distribution:", Counter(fabrics))
+                # Paste the original image (align left)
+                new_img.paste(img, (0, 0))
 
-# Check label+fabric combinations
-combo_counts = Counter([f"{label}_{fab}" for label, fab in zip(y, fabrics)])
-print("\nLabel+Fabric combinations:")
-for combo, count in combo_counts.most_common():
-    print(f"  {combo}: {count}")
+                # Save
+                new_img.save(dest_path)
 
-# STRATIFY BY LABEL ONLY
-X_train, X_val, y_train, y_val = train_test_split(
-    X, y,
-    test_size=0.2,
-    stratify=y,  # Only balance defect/no-defect
-    random_state=42
-)
+    except Exception as e:
+        print(f"Error processing {src_path}: {e}")
 
-# Create dirs and copy
-for split in ["train", "val"]:
-    os.makedirs(os.path.join(out_base, split, "images"), exist_ok=True)
-    os.makedirs(os.path.join(out_base, split, "masks"), exist_ok=True)
 
-def copy_files(paths, labels, split):
-    for path, label in zip(paths, labels):
-        dest_img_path = os.path.join(out_base, split, "images", os.path.basename(path))
-        shutil.copy(path, dest_img_path)
+def copy_files(file_list, label_list, split):
+    # Create directories
+    dest_img_folder = os.path.join(out_base, split, "images")
+    dest_mask_folder = os.path.join(out_base, split, "masks")
+    os.makedirs(dest_img_folder, exist_ok=True)
+    os.makedirs(dest_mask_folder, exist_ok=True)
 
+    print(f"\nProcessing {split} set...")
+
+    for path, label in zip(file_list, label_list):
         image_filename = os.path.basename(path)
-        dest_mask_folder = os.path.join(out_base, split, "masks")
+        dest_img_path = os.path.join(dest_img_folder, image_filename)
+
+        # Default assumption: Image is valid unless proven otherwise
+        is_valid_defect = False
 
         if label == 1:  # Defect Image
             mask_path = get_mask_path(path, mask_base_dir)
             dest_mask_path = os.path.join(dest_mask_folder, os.path.basename(mask_path))
 
             if os.path.exists(mask_path):
-                # Copy the real defect mask
-                shutil.copy(mask_path, dest_mask_path)
-            else:
-                print(f"WARNING: Mask not found for {image_filename}. Creating placeholder.")
+                try:
+                    with Image.open(mask_path) as m:
+                        if np.array(m).max() > 0:
+                            # It has white pixels. REAL defect.
+                            is_valid_defect = True
+                            safe_save_image(mask_path, dest_mask_path)
+                        else:
+                            # It exists but is all black. FAKE defect.
+                            print(f"SKIPPING POISON: {image_filename} has an empty mask.")
+                except Exception as e:
+                    print(f"Error checking mask {mask_path}: {e}")
+
+            # If it was not valid (either missing file OR empty content)
+            if not is_valid_defect:
+                # Mark as missing so the Data Loader skips it
+                if not os.path.exists(mask_path):
+                    print(f"WARNING: Mask file missing for {image_filename}")
+
                 with open(os.path.join(dest_mask_folder, image_filename.replace('.png', '_MISSING_MASK.txt')),
                           'w') as f:
-                    f.write(f"Mask missing for {image_filename}")
+                    f.write(f"Mask invalid for {image_filename}")
+
+            # Only save the image if we didn't mark it as broken?
+            # Actually, we SAVE the image, but the _MISSING_MASK file tells the loader to ignore it.
+            safe_save_image(path, dest_img_path)
 
         else:  # NoDefect Image (label == 0)
+            safe_save_image(path, dest_img_path)
+            # Create marker file for normal images
             placeholder_filename = image_filename.replace('.png', '_EMPTY_MASK_PLACEHOLDER.txt')
             with open(os.path.join(dest_mask_folder, placeholder_filename), 'w') as f:
                 f.write(f"Generate all-black mask for image {image_filename}")
+
+# 1. Find Files
+defect_paths = glob.glob(os.path.join(base_path, "Defect_images", "*.png"))
+nodefect_paths = glob.glob(os.path.join(base_path, "NODefect_images", "**", "*.png"), recursive=True)
+mask_base_dir = os.path.join(base_path, "Mask_images")
+
+print(f"Found {len(defect_paths)} defect images")
+print(f"Found {len(nodefect_paths)} normal images")
+
+# 2. Combine
+X = defect_paths + nodefect_paths
+y = [1] * len(defect_paths) + [0] * len(nodefect_paths)
+fabrics = [get_fabric_type(p) for p in X]
+
+# 3. Split
+X_train, X_val, y_train, y_val = train_test_split(
+    X, y,
+    test_size=0.2,
+    stratify=y,
+    random_state=42
+)
+
+# 4. Clear Old Output Directory
+if os.path.exists(out_base):
+    print("Cleaning old processed folder...")
+    shutil.rmtree(out_base)
+
+# 5. Run Processing
 copy_files(X_train, y_train, "train")
 copy_files(X_val, y_val, "val")
 
-print(f"\nTraining - Defect: {sum(y_train)}, NoDefect: {len(y_train)-sum(y_train)}")
-print(f"Validation - Defect: {sum(y_val)}, NoDefect: {len(y_val)-sum(y_val)}")
-
-# Check fabric distribution in splits
-train_fabrics = [get_fabric_type(p) for p in X_train]
-val_fabrics = [get_fabric_type(p) for p in X_val]
-print("\nTrain fabrics:", Counter(train_fabrics))
-print("Val fabrics:", Counter(val_fabrics))
+print(f"\nDataset processed to: {out_base}")
+print(f"Training: {len(X_train)} images")
+print(f"Validation: {len(X_val)} images")

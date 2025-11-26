@@ -3,5 +3,6 @@
 *.h5
 *.keras
 *.pdf
+*.zip
 /.idea
 /.venv

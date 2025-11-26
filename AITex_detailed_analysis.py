@@ -7,9 +7,6 @@ from collections import Counter
 
 base_path = "D:/AITexProject/aitex_dataset"
 
-# ==========================================
-# DETAILED DATASET STATISTICS
-# ==========================================
 def analyze_dataset_statistics():
     # Count images
     defect_dir = os.path.join(base_path, "Defect_images")
@@ -30,9 +27,6 @@ def analyze_dataset_statistics():
     return defect_files, nodefect_files
 
 
-# ==========================================
-# IMAGE QUALITY ANALYSIS
-# ==========================================
 def analyze_image_quality(defect_files, nodefect_files):
     # Analyze image properties for understanding data characteristics
     print("IMAGE QUALITY ANALYSIS")
@@ -93,10 +87,6 @@ def analyze_image_quality(defect_files, nodefect_files):
     plt.savefig('aitex_image_quality_analysis.png', dpi=300)
 
 
-
-# ==========================================
-# DEFECT TYPE ANALYSIS
-# ==========================================
 def analyze_defect_types():
     # Analyze defect characteristics using masks
     print("DEFECT CHARACTERISTICS ANALYSIS")
@@ -191,10 +181,6 @@ def create_sample_visualization():
     plt.show()
     print("Saved: aitex_sample_visualization.png")
 
-
-# ==========================================
-# RUN ALL ANALYSES
-# ==========================================
 if __name__ == "__main__":
     defect_files, nodefect_files = analyze_dataset_statistics()
     analyze_image_quality(defect_files, nodefect_files)
@@ -212,5 +198,3 @@ if __name__ == "__main__":
             fabrics.append(fabric)
 
     print(Counter(fabrics))
-
-    print("ANALYSIS COMPLETE")

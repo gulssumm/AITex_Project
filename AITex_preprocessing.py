@@ -1,7 +1,6 @@
 import os
 
 # FOLDER STRUCTURE
-
 base_path = "D:/AITexProject/aitex_dataset"
 folders = ["Defect_images", "NODefect_images", "Mask_images"]
 
