@@ -1,5 +1,5 @@
 /aitex_dataset
-/aitex_dataset_processed
+/aitex_raw_clean
 *.h5
 *.keras
 *.pdf
