@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import os
 
 # === PATH ===
-data_dir = "D:/AITexProject/aitex_dataset_processed"
+data_dir = "D:/AITexProject/aitex_raw_clean"
 
 # === LOAD DATASETS ===
 img_size = (224, 224)

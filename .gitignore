@@ -4,5 +4,6 @@
 *.keras
 *.pdf
 *.zip
+*.csv
 /.idea
 /.venv
