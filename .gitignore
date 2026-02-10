@@ -2,7 +2,6 @@
 /aitex_raw_clean
 *.h5
 *.keras
-*.pdf
 *.zip
 *.csv
 /.idea
